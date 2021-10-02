@@ -8,16 +8,13 @@ const svbtle = 'http://betacar.net/feed';
 
 function parseArticle({id, title, description, content, created, link}) {
   const slug = id.split(':Post/')[1],
-    markdown = content ? NodeHtmlMarkdown.translate(content) : null,
+    html = content ? NodeHtmlMarkdown.translate(content) : null,
     publishedOn = new Date(created);
 
   return {
     slug, title, publishedOn,
     link, description,
-    content: {
-      markdown,
-      html: content
-    }
+    content: html
   };
 }
 

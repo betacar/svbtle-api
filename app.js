@@ -1,75 +1,57 @@
-var util = require('util'),
-    rss = require('parserss'),
-    express = require('express'),
-    md = require('to-markdown'),
-    app = express();
+const util = require('util'),
+  rss = require('rss-to-json').parse,
+  express = require('express'),
+  {NodeHtmlMarkdown} = require('node-html-markdown'),
+  app = express();
 
-var svbtle_url = 'https://%s.svbtle.com/feed';
+const svbtle = 'http://betacar.net/feed';
 
-function parseArticle (article) {
-    var title = article.title,
-        content = article.description,
-        markdown = md(content),
-        author = article.author,
-        timestamp = article.date.valueOf(),
-        url = article.link;
+function parseArticle({id, title, description, content, created, link}) {
+  const slug = id.split(':Post/')[1],
+    markdown = content ? NodeHtmlMarkdown.translate(content) : null,
+    publishedOn = new Date(created);
 
-    return {
-        title: title,
-        content: content,
-        markdown: markdown,
-        author: author,
-        timestamp: timestamp,
-        url: url
-    };
+  return {
+    slug, title, publishedOn,
+    link, description,
+    content: {
+      markdown,
+      html: content
+    }
+  };
 }
 
-function getRSSFeed (username, limit, callback) {
-    var url = util.format(svbtle_url, username);
-
-    rss(url, limit, function (err, data) {
-        callback(err, data);
-    });
+function getRSSFeed() {
+  return rss(svbtle)
+    .then(response => response.items.map(parseArticle));
 }
 
 function handleError (res, err, data) {
-    if (err) {
-        res.status(500).send();
-        return true;
-    }
-
-    if (data.articles && data.articles.length < 1) {
-        res.status(404).send();
-        return true;
-    }
+  res.status(500).send();
 }
 
 app.use(function (req, res, next) {
-    res.set('Access-Control-Allow-Origin', '*');
-    next();
+  res.set('Access-Control-Allow-Origin', '*');
+  next();
 });
 
-app.get('/:username/latest', function (req, res) {
-    getRSSFeed(req.params.username, 1, function (err, data) {
-        if (handleError(res, err, data)) return;
-        res.json(parseArticle(data.articles[0]));
-    });
+app.get('/posts', async function (req, res) {
+  const articles = await getRSSFeed()
+  res.json(articles);
 });
 
-app.get('/:username/latest/:number', function (req, res) {
-    if (('' + parseFloat(req.params.number)) !== req.params.number) {
-        res.status(400).send();
-        return;
-    }
+app.get('/posts/latest', async function (req, res) {
+  const article = await getRSSFeed().then(articles => articles[0]);
+  res.json(article);
+});
 
-    getRSSFeed(req.params.username, +req.params.number, function (err, data) {
-        if (handleError(res, err, data)) return;
-        res.json(data.articles.map(parseArticle));
-    });
+app.get('/posts/:slug', async function (req, res) {
+  const article = await getRSSFeed().then(articles => articles.find(article => article.slug === req.params.slug));
+  res.json(article);
 });
 
 app.get('/ping', function (req, res) {
-    res.send('pong');
+  res.send('pong');
 });
 
 app.listen(process.env.PORT);
